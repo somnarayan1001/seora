@@ -58,5 +58,11 @@ MAX_REDIRECTS = _int("MAX_REDIRECTS", 5)
 # 169.254.x, fc00::/7, ...), checked on every redirect hop. Keep this on whenever
 # anyone but you can reach the server.
 BLOCK_PRIVATE_ADDRESSES = _bool("BLOCK_PRIVATE_ADDRESSES", True)
+# --- side requests (images now; links and resources later) ---
+ASSET_TIMEOUT = _int("ASSET_TIMEOUT", 8)            # seconds for one image or other file
+ASSET_BUDGET = _int("ASSET_BUDGET", 25)             # seconds for all of one check group's side requests
+PARALLEL_FETCHES = _int("PARALLEL_FETCHES", 6)      # side requests at once, per report: 6, as browsers use per site
+MAX_IMAGES_CHECKED = _int("MAX_IMAGES_CHECKED", 40) # images fetched for size and format; the rest are only read from the HTML
+
 # Only these ports may be fetched, so the server can't be used to probe other services.
 ALLOWED_PORTS = _ports("ALLOWED_PORTS", "80,443,8080,8443")

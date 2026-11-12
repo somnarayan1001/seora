@@ -279,7 +279,7 @@ footer a { color: inherit; }
       </div>
       <p class="hint">Free on-page and technical check, with a plain-English fix for every problem. Seora fetches the page itself and stores nothing.</p>
       <div class="chips" aria-label="What is checked">
-        <span class="chip">Title</span><span class="chip">Description</span><span class="chip">Canonical</span><span class="chip">Robots</span><span class="chip">Viewport</span><span class="chip">Language</span><span class="chip">Charset</span><span class="chip">Favicon</span><span class="chip">Open Graph</span><span class="chip">Twitter card</span><span class="chip">Structured data</span><span class="chip">H1</span><span class="chip">Heading order</span><span class="chip">Word count</span><span class="chip">Text-to-HTML ratio</span>
+        <span class="chip">Title</span><span class="chip">Description</span><span class="chip">Canonical</span><span class="chip">Robots</span><span class="chip">Viewport</span><span class="chip">Language</span><span class="chip">Charset</span><span class="chip">Favicon</span><span class="chip">Open Graph</span><span class="chip">Twitter card</span><span class="chip">Structured data</span><span class="chip">H1</span><span class="chip">Heading order</span><span class="chip">Word count</span><span class="chip">Text-to-HTML ratio</span><span class="chip">Alt text</span><span class="chip">Broken images</span><span class="chip">Image size</span><span class="chip">Image format</span><span class="chip">Width and height</span><span class="chip">Lazy loading</span>
       </div>
     </form>
 
@@ -351,7 +351,10 @@ footer a { color: inherit; }
     clearTimeout(statusTimer);
     if (on) {
       $("#status-text").textContent = "Fetching the page…";
-      statusTimer = setTimeout(() => { $("#status-text").textContent = "Running the checks…"; }, 2500);
+      statusTimer = setTimeout(() => {
+        $("#status-text").textContent = "Running the checks…";
+        statusTimer = setTimeout(() => { $("#status-text").textContent = "Measuring images. Pages with many images take a little longer…"; }, 3000);
+      }, 2500);
     }
   }
   function showError(msg) {

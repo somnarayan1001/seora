@@ -18,10 +18,28 @@ Newest first. Add an entry with every change, and keep "Open items" current.
 - Some sites answer bots slowly or not at all (neverssl.com takes about 16 s for any non-browser user agent, so Seora times out at 15 s). That is what search engine bots see too, so Seora reports it rather than pretending to be a browser.
 - Brotli (`br`) compression can't be decoded with the standard library, so Seora asks for gzip only. The Technical group will check for brotli support separately.
 
+**Speed**
+- Pages with many images take longer: about 13–15 s for bbc.com/news and apple.com from this PC, because each image needs a new secure connection and the network to their image servers is slow (about 0.4 s per round trip). Reusing one connection per image server would roughly halve this. Not done yet, because the connection pinning that blocks private addresses has to be kept for every reused connection.
+
 **Next**
-- Check group 3: Images (waiting for the owner's review of group 2).
+- Check group 4: Links (waiting for the owner's review of group 3).
 
 ## History
+
+### 2026-11-12: Check group 3: Images
+- New group `seora/checks/images.py`, shown after Content.
+- **Alt text:** images with no alt attribute are a warning, listing up to 5 by file name. Empty alt (`alt=""`) is a notice, because it's right for decorative images but wrong for images that show content. Images marked decorative (`role="presentation"`, `aria-hidden="true"`) or described with `aria-label` aren't counted as missing (bbc.com uses `aria-label="image unavailable"` on its placeholders).
+- **Broken images:** any image answering 4xx or 5xx is an error. Images that don't answer at all are a notice ("couldn't be checked"), not counted as broken.
+- **File size:** each distinct image is fetched once: a HEAD request, or a 1-byte ranged GET when HEAD is refused or gives no size (the size is read from Content-Range). Over 200 KB is a warning, listing the heaviest first, with the total for all images. When the large images offer smaller versions through srcset, the report says that browsers on small screens may download less.
+- **Format:** JPEG, PNG, GIF, BMP or TIFF files over 10 KB are a notice suggesting WebP or AVIF. Images inside `<picture>` with a WebP or AVIF `<source>` are fine. Images are requested with the same Accept header as a browser, so servers that pick the format per visitor (such as BBC's) are judged on what visitors get.
+- **Width and height:** images missing either attribute are a notice (layout shift). It's not a warning because Seora can't see CSS, which may already reserve the space.
+- **Lazy loading:** after the first 3 images, those without `loading="lazy"` are a notice. A lazy first or second image is a notice that says it only matters if the image is on the first screen (gov.uk's first images are further down). Script-based lazy loading (`data-src` with a placeholder `src`) counts as lazy, and the real address is the one measured.
+- Tracking pixels (1×1, 0×0) are left out of every check. Fallback copies inside `<noscript>` aren't counted twice.
+- Limits: up to 40 images fetched per page, 6 at a time, 8 s per image and 25 s for the whole group. Anything past the limits is reported as not checked. All of this goes through the safe fetcher, so the private-address rules apply to every image too. The fetcher gained a `timeout` option for these shorter side requests.
+- The waiting message now says "Measuring images…" after about 5 seconds.
+- 13 new tests in `tests/test_images.py` (47 in total), with a fake server that imitates the three ways servers answer (size in HEAD, HEAD refused but Range honoured, Range ignored).
+- Checked with the server running: bbc.com/news, Wikipedia article, gov.uk, react.dev, amazon.in, unsplash.com (18 images over 200 KB), apple.com (over 40 images, so the cap shows), python.org. Interface checked at 1366×650 (the list of checks is now 2 rows and still fits) and 375 px with no sideways scrolling.
+- Severities chosen for the owner's review: missing alt is a warning, broken images an error, large images a warning; empty alt, format, width/height and lazy loading are notices.
 
 ### 2026-11-12: Several H1s is now an error
 - Owner's decision after reviewing the Content group: a page must have exactly one H1, so more than one is an error (10 points) instead of a warning (4). Skipped heading levels, the 300-word thin-content limit and the 10% text ratio stay as they were.

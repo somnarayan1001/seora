@@ -20,7 +20,7 @@ Then open http://localhost:8800 in your browser. Press Ctrl+C in the terminal to
 |---|---|---|
 | Meta tags | Title (30–60 characters), meta description (70–160), canonical tag, robots meta tag and X-Robots-Tag (noindex, nofollow), mobile viewport, page language, character encoding, favicon, Open Graph, Twitter (X) card, JSON-LD structured data | Done |
 | Content | Exactly one H1, heading order (no skipped levels, no empty headings), word count with a thin-content warning, text-to-HTML ratio | Done |
-| Images | Alt text, file size, format, width and height, lazy loading | Planned |
+| Images | Missing or empty alt text, broken images, file size, format (suggests WebP or AVIF), width and height attributes, lazy loading | Done |
 | Links | Internal and external, broken, redirecting, nofollow, empty anchor text | Planned |
 | Technical | Status code, HTTPS, mixed content, redirects, compression, caching, robots.txt, sitemap.xml | Planned |
 | Page loading | Time to first byte, download time, page weight, heaviest resources | Planned |
@@ -42,6 +42,10 @@ All settings are in `config.py`. Each can be changed with an environment variabl
 | `SEORA_MAX_PAGE_BYTES` | `5000000` | Pages bigger than this are cut off |
 | `SEORA_MAX_REDIRECTS` | `5` | Redirects followed before giving up |
 | `SEORA_BLOCK_PRIVATE_ADDRESSES` | `true` | Refuse addresses on private or local networks. Keep this on. |
+| `SEORA_ASSET_TIMEOUT` | `8` | Seconds allowed for fetching one image or other file |
+| `SEORA_ASSET_BUDGET` | `25` | Seconds allowed for all of one check group's extra fetches |
+| `SEORA_PARALLEL_FETCHES` | `6` | Extra files fetched at once for one report (browsers also use 6 per site) |
+| `SEORA_MAX_IMAGES_CHECKED` | `40` | Images fetched for size and format; the rest are only read from the HTML |
 | `SEORA_ALLOWED_PORTS` | `80,443,8080,8443` | Ports that may be fetched |
 | `SEORA_MAX_REQUEST_BYTES` | `4096` | Largest request the API accepts |
 | `SEORA_MAX_CONCURRENT_AUDITS` | `4` | Checks that can run at once; others are asked to try again |

@@ -4,6 +4,6 @@ Each module has GROUP (a label people see) and run(ctx), which returns a list of
 issues made with issue(). To add a group, write the module and list it here.
 """
 
-from . import content, meta
+from . import content, images, meta
 
-GROUPS = [meta, content]
+GROUPS = [meta, content, images]

@@ -206,11 +206,14 @@ _TLS = ssl.create_default_context()
 # ---------- fetching ----------
 
 def fetch(url, method="GET", max_bytes=None, accept="text/html,application/xhtml+xml,*/*;q=0.8",
-          extra_headers=None, follow_redirects=True):
-    """Fetch a URL safely. Returns a Response, or raises FetchError with a plain-English message."""
+          extra_headers=None, follow_redirects=True, timeout=None):
+    """Fetch a URL safely. Returns a Response, or raises FetchError with a plain-English message.
+
+    timeout: seconds for the whole fetch, redirects included (default config.TOTAL_TIMEOUT).
+    Use a shorter one for side requests such as images, so one slow file can't hold up a report."""
     max_bytes = config.MAX_PAGE_BYTES if max_bytes is None else max_bytes
     started = time.monotonic()
-    deadline = started + config.TOTAL_TIMEOUT
+    deadline = started + min(timeout or config.TOTAL_TIMEOUT, config.TOTAL_TIMEOUT)
     url = check_url(url)
     chain = []
     seen = set()

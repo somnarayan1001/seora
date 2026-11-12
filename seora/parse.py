@@ -86,6 +86,7 @@ class _Parser(HTMLParser):
         self.svg_title = False    # inside an <svg><title> that sits in a heading
         self.anchor = None        # current anchor dict being filled
         self.script = None        # current inline script dict
+        self.picture = None       # [<source> types] while inside <picture>
         self.text = []
         self._hidden_tags = []    # stack of open hidden elements
 
@@ -125,9 +126,17 @@ class _Parser(HTMLParser):
             self._close_anchor()
             self.anchor = {"href": a.get("href"), "url": self._url(a.get("href")), "rel": a.get("rel", ""),
                            "text": [], "img_alt": [], "title": a.get("title", "")}
+        elif tag == "picture":
+            self.picture = []
+        elif tag == "source" and self.picture is not None:
+            self.picture.append((a.get("type") or "").strip().lower())
         elif tag == "img":
             a["url"] = self._url(a.get("src"))
-            p.images.append(a)
+            # The <source> formats offered next to this image inside <picture>
+            a["_picture_types"] = list(self.picture) if self.picture is not None else None
+            # Fallback copies inside <noscript> and <template> aren't shown when scripts run; don't count them twice
+            if not {"noscript", "template"} & set(self._hidden_tags):
+                p.images.append(a)
             if self.anchor is not None and a.get("alt"):
                 self.anchor["img_alt"].append(a["alt"])
             if self.heading is not None and a.get("alt") and not self.hidden:
@@ -182,6 +191,8 @@ class _Parser(HTMLParser):
             self._close_heading()
         elif tag == "script":
             self.script = None
+        elif tag == "picture":
+            self.picture = None
         elif tag == "head":
             # Some pages forget <body>; text after </head> is body text
             self.in_body = True
