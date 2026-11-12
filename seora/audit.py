@@ -39,6 +39,7 @@ class Context:
     charset_source: str
     extra_fetches: list = field(default_factory=list)
     pool: object = None  # fetchmod.ConnectionPool shared by every fetch for this report
+    memo: dict = field(default_factory=dict)  # results shared between check groups (e.g. file sizes)
 
     def fetch(self, url, **kw):
         """Fetch another resource (image, favicon, robots.txt...) through the safe fetcher.

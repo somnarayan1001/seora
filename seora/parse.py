@@ -40,7 +40,7 @@ class Page:
     anchors: list = field(default_factory=list)      # {href, url, text, rel, img_alt}
     images: list = field(default_factory=list)       # <img> attribute dicts, plus "url"
     headings: list = field(default_factory=list)     # (level, text)
-    scripts: list = field(default_factory=list)      # {src, url, type, async, defer, text (inline only)}
+    scripts: list = field(default_factory=list)      # {src, url, type, async, defer, text (inline only), in_head}
     media: list = field(default_factory=list)        # {tag, url, poster} for iframe, video, audio, source, embed, object, track
     base_href: str = None
     text: str = ""                                   # visible body text
@@ -158,7 +158,7 @@ class _Parser(HTMLParser):
             self.heading = [HEADINGS[tag], [], []]
         elif tag == "script":
             s = {"src": a.get("src"), "url": self._url(a.get("src")), "type": a.get("type", ""),
-                 "async": "async" in a, "defer": "defer" in a, "text": None}
+                 "async": "async" in a, "defer": "defer" in a, "text": None, "in_head": not self.in_body}
             p.scripts.append(s)
             if not a.get("src"):
                 self.script = s

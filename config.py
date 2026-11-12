@@ -63,6 +63,7 @@ ASSET_TIMEOUT = _int("ASSET_TIMEOUT", 8)            # seconds for one image or o
 ASSET_BUDGET = _int("ASSET_BUDGET", 25)             # seconds for all of one check group's side requests
 PARALLEL_FETCHES = _int("PARALLEL_FETCHES", 6)      # side requests at once, per report: 6, as browsers use per site
 MAX_IMAGES_CHECKED = _int("MAX_IMAGES_CHECKED", 40) # images fetched for size and format; the rest are only read from the HTML
+MAX_FILES_CHECKED = _int("MAX_FILES_CHECKED", 40)   # scripts and stylesheets measured for page weight
 MAX_LINKS_CHECKED = _int("MAX_LINKS_CHECKED", 80)   # link addresses checked for broken links and redirects (this site's first)
 
 # Only these ports may be fetched, so the server can't be used to probe other services.

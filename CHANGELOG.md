@@ -16,15 +16,31 @@ Newest first. Add an entry with every change, and keep "Open items" current.
 - On Windows, Python only trusts root certificates that Windows has already downloaded. A site whose certificate chains to a root this PC hasn't seen yet fails with "couldn't be confirmed" until Windows fetches that root (opening the site once in Edge or Chrome does it). Linux servers have a full certificate bundle, so this goes away after the cloud move.
 - Fonts: the Docura fonts (Outfit, Figtree) come from Google Fonts, which would be an outside service, so Seora uses them only if installed and otherwise falls back to Segoe UI / system fonts.
 - Some sites answer bots slowly or not at all (neverssl.com takes about 16 s for any non-browser user agent, so Seora times out at 15 s). That is what search engine bots see too, so Seora reports it rather than pretending to be a browser.
-- Brotli (`br`) compression can't be decoded with the standard library, so Seora asks for gzip only. The Technical group will check for brotli support separately.
+- Brotli (`br`) compression can't be decoded with the standard library, so Seora asks for gzip only. The Technical group checks separately whether the site offers Brotli.
+- Page loading can't time what visitors see (LCP, CLS), because Seora doesn't run the page in a browser. Headless Chrome could, but it's a third-party program and would need its own private-address guard: the owner decides whether to add it.
 
 **Speed**
-- A full report now takes about 8–13 s for big pages (bbc.com/news, github.com, gov.uk, python.org) and under a second for tiny ones. Sites with slow side pages can reach the time limits: apple.com takes about 33 s, because its shop links each go through two redirects (about 4.5 s each), so the Links group stops at its 25 s limit and reports the rest as not checked. Running the Images and Links groups at the same time would save up to 25 s on such pages; not done, to keep the load on each site at 6 requests at once.
+- A full report takes about 8–20 s for big pages (bbc.com/news, github.com, gov.uk, python.org, react.dev) and under a second for tiny ones. Sites with slow side pages reach the time limits: apple.com and amazon.in take about 37 s, mostly because their links answer slowly, so the Links group stops at its 25 s limit and reports the rest as not checked. Running the Images, Links and Technical groups at the same time would save up to about 25 s on such pages; not done, to keep the load on each site at 6 requests at once. The owner may prefer a lower limit instead (`SEORA_ASSET_BUDGET`).
 
 **Next**
-- Check group 6: Page loading (waiting for the owner's review of group 5).
+- Whole-site mode: crawl, Site Health score, cross-page issues (waiting for the owner's review of group 6).
 
 ## History
+
+### 2026-11-12: Check group 6: Page loading
+- New group `seora/checks/loading.py`, shown last. Everything is measured by the server from the files themselves; nothing runs in a browser.
+- **Server response:** the time to first byte is split into connecting (name lookup, connection, HTTPS) and the server's own wait. Only the server's part is graded, because connecting depends mostly on the distance between Seora and the site: from this PC it took 75 ms for example.com and 1.2 s for bbc.com. Over 600 ms (Lighthouse's limit) is a notice; over 1.5 s is a warning. The detail shows both parts, the whole HTML time, and time spent on redirects. The fetcher now records the connection time (`connect_ms`).
+- **Download time:** the HTML taking over 1 s to arrive after its first byte is a notice.
+- **HTML size:** over 300 KB is a notice, over 1 MB a warning, with the compressed size shown too.
+- **Page weight:** HTML, scripts, stylesheets and images, counting only what loads before scrolling (lazy images are listed but left out of the total). Over 2 MB is a notice, over 5 MB a warning. Files that couldn't be measured are mentioned, and fonts and files that scripts load later aren't counted. More than 80 files is a notice.
+- **JavaScript:** over 500 KB over the network is a notice, over 1 MB a warning.
+- **Scripts that hold up the first display:** external scripts in `<head>` without async or defer (and not modules) are a notice.
+- **Heaviest files:** the 5 biggest, as information (a passed item). Names say which site or folder a file comes from when the file name alone doesn't (Google's `js`, or Apple's five different `1250x668sr.jpg` files).
+- Image sizes measured by the Images group are reused, so no image is fetched twice. The size probe moved to `checks/_sizes.py` and remembers its results for the report (`ctx.memo`).
+- The parser now notes whether each script is in `<head>`.
+- 10 new tests in `tests/test_loading.py` (96 in total), including one that checks no image is fetched twice.
+- Checked with the server running: python.org, bbc.com/news (1.1 MB of JavaScript), react.dev (1.0 MB of JavaScript), apple.com (3.3 MB before scrolling), unsplash.com, amazon.in (777 KB of HTML), example.com, w3.org/TR (1.1 MB of HTML). Interface checked at 1366×650 (the list of checks is 4 rows and still fits the first screen) and 375 px with no sideways scrolling.
+- Severities chosen for the owner's review: very heavy page, very large JavaScript, very large HTML and a slow server are warnings; the milder levels and scripts in `<head>` are notices.
 
 ### 2026-11-12: Check group 5: Technical
 - New group `seora/checks/technical.py`, shown last. Its extra requests run side by side through the report's shared connections, adding about 1–2 s to a report.

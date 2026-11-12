@@ -23,7 +23,7 @@ Then open http://localhost:8800 in your browser. Press Ctrl+C in the terminal to
 | Images | Missing or empty alt text, broken images, file size, format (suggests WebP or AVIF), width and height attributes, lazy loading | Done |
 | Links | Links to this site and to others, broken links, links that go through redirects, nofollow on your own links, links without text | Done |
 | Technical | Status code, HTTPS (and whether http:// redirects to it, HSTS), mixed content, redirect chain, gzip/Brotli compression, caching of the page and its files, robots.txt (read the way Google reads it) and the XML sitemap | Done |
-| Page loading | Time to first byte, download time, page weight, heaviest resources | Planned |
+| Page loading | Server response time (connection time shown apart), HTML download time and size, page weight before scrolling, JavaScript weight, scripts that hold up the first display, heaviest files. Measured by the server, not in a browser. | Done |
 | Whole site | Crawl with page and depth limits, Site Health score, duplicate titles and content, orphan pages | Planned |
 
 Each problem is an **error** (costs 10 points), **warning** (4) or **notice** (1). Results can be exported as CSV.
@@ -46,6 +46,7 @@ All settings are in `config.py`. Each can be changed with an environment variabl
 | `SEORA_ASSET_BUDGET` | `25` | Seconds allowed for all of one check group's extra fetches |
 | `SEORA_PARALLEL_FETCHES` | `6` | Extra files fetched at once for one report (browsers also use 6 per site) |
 | `SEORA_MAX_IMAGES_CHECKED` | `40` | Images fetched for size and format; the rest are only read from the HTML |
+| `SEORA_MAX_FILES_CHECKED` | `40` | Scripts and stylesheets measured for page weight |
 | `SEORA_MAX_LINKS_CHECKED` | `80` | Link addresses checked for broken links and redirects (links to the same site first) |
 | `SEORA_ALLOWED_PORTS` | `80,443,8080,8443` | Ports that may be fetched |
 | `SEORA_MAX_REQUEST_BYTES` | `4096` | Largest request the API accepts |

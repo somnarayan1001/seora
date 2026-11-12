@@ -13,6 +13,7 @@ from urllib.parse import unquote, urljoin, urlsplit
 import config
 
 from ._fetchmany import fetch_many
+from ._sizes import probe_size
 from ._issue import clip, issue
 
 GROUP = "Images"
@@ -111,13 +112,8 @@ def _plural(n, word):
 
 # ---------- fetching ----------
 
-def _int(text):
-    text = (text or "").strip()
-    return int(text) if text.isdigit() else None
-
-
-def _ctype(resp, url):
-    ct = resp.content_type if resp is not None else ""
+def image_type(ct, url):
+    """The image format: from the server's Content-Type, or from the file extension when that says nothing useful."""
     if ct.startswith("image/"):
         return "image/jpeg" if ct == "image/jpg" else ct
     path = urlsplit(url).path.lower()
@@ -125,27 +121,9 @@ def _ctype(resp, url):
 
 
 def probe(ctx, url):
-    """(status, size, content type) for one image. status None means no answer."""
-    r = ctx.fetch(url, method="HEAD", accept=ACCEPT, timeout=config.ASSET_TIMEOUT)
-    if r is not None and r.status < 400:
-        n = _int(r.header("content-length"))
-        if n:
-            return r.status, n, _ctype(r, url)
-    if r is not None and r.status >= 400 and r.status not in (403, 405, 501):
-        return r.status, None, ""
-    # HEAD not allowed, or no size given: ask for the first byte, and read the size from Content-Range
-    g = ctx.fetch(url, method="GET", accept=ACCEPT, max_bytes=config.MAX_PAGE_BYTES,
-                  extra_headers={"Range": "bytes=0-0"}, timeout=config.ASSET_TIMEOUT)
-    if g is None:
-        return (r.status if r is not None else None), None, ""
-    if g.status >= 400:
-        return g.status, None, ""
-    if g.status == 206:
-        m = re.search(r"/\s*(\d+)\s*$", g.header("content-range"))
-        n = int(m.group(1)) if m else None
-    else:  # the server ignored Range and sent the whole file
-        n = _int(g.header("content-length")) or (None if g.truncated else g.transfer_bytes or len(g.body))
-    return g.status, n, _ctype(g, url)
+    """(status, size, image type) for one image. status None means no answer."""
+    status, size, ct = probe_size(ctx, url, ACCEPT)
+    return status, size, (image_type(ct, url) if status is not None and status < 400 else "")
 
 
 def _data_url_size(url):

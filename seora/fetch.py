@@ -58,6 +58,7 @@ class Response:
     transfer_bytes: int = 0       # bytes received over the wire for the body (compressed size)
     truncated: bool = False       # body was cut off at the size cap
     ttfb_ms: float = 0.0          # final hop: from starting the request to the first byte of the reply
+    connect_ms: float = 0.0       # final hop: name lookup, connection and HTTPS setup (0 on a reused connection)
     download_ms: float = 0.0      # final hop: time spent receiving the body
     total_ms: float = 0.0         # all hops, DNS and connection setup included
     ip: str = ""                  # address of the final server
@@ -322,6 +323,9 @@ def _fetch_once(url, method, max_bytes, accept, extra_headers, deadline, pool=No
                 conn.sock.settimeout(timeout)
         keep = False
         try:
+            if conn.sock is None:
+                conn.connect()  # explicitly, so the connection setup can be timed on its own
+            connect_ms = (time.monotonic() - hop_start) * 1000 if not reused else 0.0
             conn.request(method, target, headers=headers)
             r = conn.getresponse()
             ttfb = (time.monotonic() - hop_start) * 1000
@@ -339,7 +343,7 @@ def _fetch_once(url, method, max_bytes, accept, extra_headers, deadline, pool=No
             keep = pool is not None and r.isclosed() and not r.will_close and not truncated
             return Response(url=url, status=r.status, reason=r.reason or "", headers=raw_headers, body=body,
                             content_encoding=encoding, transfer_bytes=transfer, truncated=truncated,
-                            ttfb_ms=ttfb, download_ms=download, ip=conn._ip)
+                            ttfb_ms=ttfb, download_ms=download, connect_ms=connect_ms, ip=conn._ip)
         except _STALE:
             if not reused:
                 raise _as_fetch_error(sys.exc_info()[1])
