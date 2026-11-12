@@ -22,9 +22,26 @@ Newest first. Add an entry with every change, and keep "Open items" current.
 - A full report now takes about 8–13 s for big pages (bbc.com/news, github.com, gov.uk, python.org) and under a second for tiny ones. Sites with slow side pages can reach the time limits: apple.com takes about 33 s, because its shop links each go through two redirects (about 4.5 s each), so the Links group stops at its 25 s limit and reports the rest as not checked. Running the Images and Links groups at the same time would save up to 25 s on such pages; not done, to keep the load on each site at 6 requests at once.
 
 **Next**
-- Check group 5: Technical (waiting for the owner's review of group 4).
+- Check group 6: Page loading (waiting for the owner's review of group 5).
 
 ## History
+
+### 2026-11-12: Check group 5: Technical
+- New group `seora/checks/technical.py`, shown last. Its extra requests run side by side through the report's shared connections, adding about 1–2 s to a report.
+- **Status code:** 200 passes; another 2xx is a notice; 4xx or 5xx is an error.
+- **HTTPS:** a page on http:// is an error. On https://, Seora also asks for the http:// address: if it answers on its own instead of redirecting, that's a warning (the same page exists twice). No HSTS header is a notice.
+- **Mixed content** (https pages only): scripts, stylesheets, preloads and frames on http:// are an error, because browsers block them. Images, video, audio, icons, posters and srcset entries on http:// are a warning. Ordinary links to http:// pages aren't mixed content and aren't counted.
+- **Redirect chain** to reach the page: more than one redirect is a warning, listing every step. A temporary redirect (302, 303, 307) is a notice suggesting 301.
+- **Compression:** no compression on HTML over 1.4 KB is a warning. With gzip, Seora asks again for Brotli; not offered is a notice.
+- **Caching:** a page with no Cache-Control, ETag, Last-Modified or Expires is a notice. Up to 6 CSS, JavaScript and image files are checked with a 1-byte request. Your own files cached for less than a week are a warning. Files from other companies (analytics, widgets) cached briefly are only a notice, labelled with their host, since the site owner can't change them. "Own" is judged by the last two parts of the host name (three for names like bbc.co.uk).
+- **robots.txt:** new `seora/robots.py` reads it the way Google does (RFC 9309): the most specific User-agent group, the longest matching rule, Allow winning a tie, `*` and `$`. Python's built-in reader uses the first matching rule instead, which gives wrong answers. Blocking this page is an error; a server error (5xx) is an error, because Google then stops crawling the whole site; an HTML page instead of a text file is a warning; lines that can't be understood and rules before any User-agent line are a warning; no robots.txt is a notice; more than 500 KB is a notice.
+- **Sitemap:** uses the Sitemap lines in robots.txt, otherwise tries /sitemap.xml and /sitemap_index.xml. Checks that it loads, isn't an HTML page, is valid XML in the sitemaps.org format, isn't empty, has full addresses and at most 50,000 of them, and (with a single sitemap) lists this page. Gzipped sitemaps are read. Sitemaps with a DOCTYPE or entities are refused unread, to rule out XML bombs. No sitemap anywhere is a warning; a sitemap named in robots.txt that answers 404 or 5xx is an error, and one that answers 401, 403 or 429 is a notice (bot protection). For a sitemap index, the sitemaps inside aren't opened yet.
+- On phones, the list of checks under the URL box now shows the five group names instead of every check, because the full list had grown to fill most of a phone's first screen. Desktops still show every check, in 3 rows, within the first screen at 1366×650.
+- The parser now also records iframes, video, audio, source, embed, object and track elements (for mixed content).
+- 21 new tests (86 in total): `tests/test_robots.py` with the rule examples from Google's documentation, and `tests/test_technical.py` with a fake site.
+- Checked with the server running: python.org (no sitemap anywhere, no Brotli), gov.uk (sitemap index of 36), react.dev, a Wikipedia article (sitemap refuses bots), github.com, bbc.com/news (39 sitemaps in robots.txt), example.com (http:// doesn't redirect, no robots.txt), w3.org/TR, and the http-only sites neverssl.com and info.cern.ch.
+- Fixed while testing: BBC was told "this page isn't in the sitemap" after only its first of 39 sitemaps was read, so that check now runs only when there is a single sitemap. Wikipedia's sitemap refusing bots was an error and is now a notice. Google's analytics script on react.dev was a caching warning and is now a third-party notice. On github.com the caching check took 9 s because its file server stalls on HEAD requests, so it now uses a 1-byte GET (github.com report 20 s → 11 s).
+- Severities chosen for the owner's review: no sitemap is a warning; no robots.txt, no Brotli and no HSTS are notices; passive mixed content is a warning.
 
 ### 2026-11-12: Check group 4: Links, and connection reuse
 - New group `seora/checks/links.py`, shown after Images.

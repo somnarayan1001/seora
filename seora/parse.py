@@ -17,6 +17,8 @@ HEADINGS = {"h1": 1, "h2": 2, "h3": 3, "h4": 4, "h5": 5, "h6": 6}
 BLOCK = {"p", "div", "br", "li", "ul", "ol", "tr", "td", "th", "table", "section", "article", "header",
          "footer", "nav", "aside", "main", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre",
          "dd", "dt", "dl", "figure", "figcaption", "form", "label", "option", "hr", "address"}
+# Elements that load another file (besides img, script and link)
+MEDIA = {"iframe", "video", "audio", "source", "embed", "object", "track"}
 VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
 
 
@@ -39,6 +41,7 @@ class Page:
     images: list = field(default_factory=list)       # <img> attribute dicts, plus "url"
     headings: list = field(default_factory=list)     # (level, text)
     scripts: list = field(default_factory=list)      # {src, url, type, async, defer, text (inline only)}
+    media: list = field(default_factory=list)        # {tag, url, poster} for iframe, video, audio, source, embed, object, track
     base_href: str = None
     text: str = ""                                   # visible body text
 
@@ -129,10 +132,15 @@ class _Parser(HTMLParser):
                            "aria_label": a.get("aria-label", ""), "labels": [],
                            # copies inside <noscript>/<template> aren't shown when scripts run
                            "_copy": bool({"noscript", "template"} & set(self._hidden_tags))}
+        elif tag in MEDIA:
+            src = a.get("data") if tag == "object" else a.get("src")
+            if src or a.get("poster") or a.get("srcset"):
+                p.media.append({"tag": tag, "url": self._url(src) if src else "", "poster": self._url(a.get("poster")),
+                                "srcset": a.get("srcset") or ""})
+            if tag == "source" and self.picture is not None:
+                self.picture.append((a.get("type") or "").strip().lower())
         elif tag == "picture":
             self.picture = []
-        elif tag == "source" and self.picture is not None:
-            self.picture.append((a.get("type") or "").strip().lower())
         elif tag == "img":
             a["url"] = self._url(a.get("src"))
             # The <source> formats offered next to this image inside <picture>

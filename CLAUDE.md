@@ -30,6 +30,7 @@ Read this file and `CHANGELOG.md` before changing anything. Add an entry to `CHA
 | `seora/checks/` | One module per check group. `__init__.py` lists them in report order in `GROUPS`. `_issue.py` has `issue()` and `clip()`. |
 | `seora/audit.py` | Fetch, parse, run every group, score. `Context` is what checks receive. |
 | `seora/urls.py` | URL comparison helpers. |
+| `seora/robots.py` | robots.txt reader that follows Google's rules (longest match wins, `*` and `$`). Use it for the crawler too, instead of `urllib.robotparser`, which uses the first match. |
 | `static/index.html` | The whole interface: HTML, CSS and JS in one file. |
 | `tests/` | `unittest` tests. `test_safety.py` covers the safety rules; `test_<group>.py` covers each check group with hand-made pages. |
 | `README.md` | Public description. Update its "What it checks" table when a group is added. |
@@ -41,7 +42,7 @@ Read this file and `CHANGELOG.md` before changing anything. Add an entry to `CHA
 1. Create `seora/checks/<name>.py` with `GROUP = "Label people see"` and `run(ctx)` returning a list of `issue(...)`.
 2. An issue is `{id, severity, title, detail, fix}`. Severity is `error`, `warning`, `notice` or `pass`. Ids are unique across all groups and stable (the UI and CSV use them). `fix` is a short plain-English instruction; passed checks have none.
 3. `ctx` (see `audit.Context`) has `page`, `response`, `final_url`, `requested_url`, `html`, `charset`, `charset_source`, and `ctx.fetch(url, method=..., max_bytes=..., extra_headers=..., timeout=...)`, which goes through the safe fetcher and returns a `Response` or `None`. `ctx.try_fetch` returns `(Response, None)` or `(None, error code)` when the reason for a failure matters (as for broken links). Use only these for extra requests (images, links, robots.txt): they share the report's connection pool. Keep extra requests few and capped: they all count against the visitor's wait. For many requests use `fetch_many` in `checks/_fetchmany.py` with `timeout=config.ASSET_TIMEOUT` in the probe, as `images.py` and `links.py` do: each distinct URL once, `config.PARALLEL_FETCHES` at a time, within `config.ASSET_BUDGET` seconds.
-4. Add the module to `GROUPS` in `seora/checks/__init__.py`, add chips for it in `static/index.html` (`.chips`), and add tests in `tests/test_<name>.py` that don't need the network (replace `ctx.fetch` with a stub, as `test_meta.py` does).
+4. Add the module to `GROUPS` in `seora/checks/__init__.py`, add chips for its checks in `static/index.html` (`.chips-full`) and one for the group in `.chips-short` (shown on phones instead), and add tests in `tests/test_<name>.py` that don't need the network (replace `ctx.fetch` with a stub, as `test_meta.py` does).
 5. Update `README.md`, this file if anything structural changed, and `CHANGELOG.md`.
 
 A group that raises is caught in `audit.py` and shows "These checks couldn't finish", so one bug can't sink a report. Don't rely on that: test with odd pages.

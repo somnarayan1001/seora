@@ -22,7 +22,7 @@ Then open http://localhost:8800 in your browser. Press Ctrl+C in the terminal to
 | Content | Exactly one H1, heading order (no skipped levels, no empty headings), word count with a thin-content warning, text-to-HTML ratio | Done |
 | Images | Missing or empty alt text, broken images, file size, format (suggests WebP or AVIF), width and height attributes, lazy loading | Done |
 | Links | Links to this site and to others, broken links, links that go through redirects, nofollow on your own links, links without text | Done |
-| Technical | Status code, HTTPS, mixed content, redirects, compression, caching, robots.txt, sitemap.xml | Planned |
+| Technical | Status code, HTTPS (and whether http:// redirects to it, HSTS), mixed content, redirect chain, gzip/Brotli compression, caching of the page and its files, robots.txt (read the way Google reads it) and the XML sitemap | Done |
 | Page loading | Time to first byte, download time, page weight, heaviest resources | Planned |
 | Whole site | Crawl with page and depth limits, Site Health score, duplicate titles and content, orphan pages | Planned |
 
