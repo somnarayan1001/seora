@@ -23,6 +23,9 @@ Newest first. Add an entry with every change, and keep "Open items" current.
 
 ## History
 
+### 2026-11-12: Several H1s is now an error
+- Owner's decision after reviewing the Content group: a page must have exactly one H1, so more than one is an error (10 points) instead of a warning (4). Skipped heading levels, the 300-word thin-content limit and the 10% text ratio stay as they were.
+
 ### 2026-11-12: Check group 2: Content
 - New group `seora/checks/content.py`, shown after Meta tags.
 - **H1:** missing or empty is an error; more than one is a warning; one H1 passes and shows its text. An image inside a heading counts with its alt text, as search engines read it, so a logo H1 isn't reported as empty.

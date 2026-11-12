@@ -23,7 +23,7 @@ def h1(ctx):
     out = []
     if len(h1s) > 1:
         shown = "; ".join(f"“{clip(t, 50)}”" if t else "(empty)" for t in h1s[:4]) + ("; …" if len(h1s) > 4 else "")
-        out.append(issue("h1-multiple", "warning", f"Page has {len(h1s)} H1 headings",
+        out.append(issue("h1-multiple", "error", f"Page has {len(h1s)} H1 headings",
                          f"{shown}. With several main headings it's less clear what the page is mainly about.",
                          "Keep one <h1> for the main topic and change the others to <h2>."))
     if not h1s[0]:

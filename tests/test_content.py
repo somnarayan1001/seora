@@ -31,7 +31,7 @@ class ContentChecks(unittest.TestCase):
 
     def test_h1_missing_multiple_empty(self):
         self.assertEqual(run(f"<h2>A</h2><p>{WORDS}</p>")["h1-missing"]["severity"], "error")
-        self.assertIn("h1-multiple", run(f"<h1>A</h1><h1>B</h1><p>{WORDS}</p>"))
+        self.assertEqual(run(f"<h1>A</h1><h1>B</h1><p>{WORDS}</p>")["h1-multiple"]["severity"], "error")
         self.assertIn("h1-empty", run(f"<h1> </h1><p>{WORDS}</p>"))
 
     def test_logo_image_in_h1_counts(self):
