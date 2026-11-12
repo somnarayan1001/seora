@@ -19,7 +19,7 @@ Then open http://localhost:8800 in your browser. Press Ctrl+C in the terminal to
 | Group | Checks | Status |
 |---|---|---|
 | Meta tags | Title (30–60 characters), meta description (70–160), canonical tag, robots meta tag and X-Robots-Tag (noindex, nofollow), mobile viewport, page language, character encoding, favicon, Open Graph, Twitter (X) card, JSON-LD structured data | Done |
-| Content | One H1, heading order, word count, text-to-HTML ratio | Planned |
+| Content | One H1, heading order (no skipped levels, no empty headings), word count with a thin-content warning, text-to-HTML ratio | Done |
 | Images | Alt text, file size, format, width and height, lazy loading | Planned |
 | Links | Internal and external, broken, redirecting, nofollow, empty anchor text | Planned |
 | Technical | Status code, HTTPS, mixed content, redirects, compression, caching, robots.txt, sitemap.xml | Planned |

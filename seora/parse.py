@@ -10,13 +10,17 @@ from html.parser import HTMLParser
 from urllib.parse import urljoin
 
 # Text inside these is not visible on the page
-HIDDEN = {"script", "style", "noscript", "template", "head", "svg", "math", "iframe", "object"}
+# (textarea: form-field content, and some sites keep hidden HTML templates in them)
+HIDDEN = {"script", "style", "noscript", "template", "head", "svg", "math", "iframe", "object", "textarea"}
 HEADINGS = {"h1": 1, "h2": 2, "h3": 3, "h4": 4, "h5": 5, "h6": 6}
 # Elements that start a new line, so words on either side don't run together
 BLOCK = {"p", "div", "br", "li", "ul", "ol", "tr", "td", "th", "table", "section", "article", "header",
          "footer", "nav", "aside", "main", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre",
          "dd", "dt", "dl", "figure", "figcaption", "form", "label", "option", "hr", "address"}
 VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
+
+
+_CJK = re.compile(r"[぀-ヿ㐀-䶿一-鿿豈-﫿]")
 
 
 def squash(text):
@@ -64,7 +68,11 @@ class Page:
 
     @property
     def word_count(self):
-        return len(re.findall(r"\w+", self.text))
+        # Chinese and Japanese don't put spaces between words: count those characters
+        # separately, at about two characters per word
+        cjk = len(_CJK.findall(self.text))
+        rest = _CJK.sub(" ", self.text)
+        return len(re.findall(r"\w+", rest)) + (cjk + 1) // 2
 
 
 class _Parser(HTMLParser):
@@ -74,7 +82,8 @@ class _Parser(HTMLParser):
         self.hidden = 0           # depth inside hidden elements
         self.in_body = False
         self.title_buf = None
-        self.heading = None       # [level, [text...]]
+        self.heading = None       # [level, [text...], [labels...]]
+        self.svg_title = False    # inside an <svg><title> that sits in a heading
         self.anchor = None        # current anchor dict being filled
         self.script = None        # current inline script dict
         self.text = []
@@ -121,9 +130,12 @@ class _Parser(HTMLParser):
             p.images.append(a)
             if self.anchor is not None and a.get("alt"):
                 self.anchor["img_alt"].append(a["alt"])
+            if self.heading is not None and a.get("alt") and not self.hidden:
+                # A logo image in an H1 counts: search engines read its alt text as the heading
+                self.heading[1].append(" " + a["alt"] + " ")
         elif tag in HEADINGS:
             self._close_heading()
-            self.heading = [HEADINGS[tag], []]
+            self.heading = [HEADINGS[tag], [], []]
         elif tag == "script":
             s = {"src": a.get("src"), "url": self._url(a.get("src")), "type": a.get("type", ""),
                  "async": "async" in a, "defer": "defer" in a, "text": None}
@@ -131,6 +143,11 @@ class _Parser(HTMLParser):
             if not a.get("src"):
                 self.script = s
                 s["text"] = ""
+        if self.heading is not None and a.get("aria-label"):
+            # An icon or SVG logo labelled for screen readers names the heading when it has no text
+            self.heading[2].append(a["aria-label"])
+        if tag == "title" and self.heading is not None and self.in_svg():
+            self.svg_title = True
         if tag in BLOCK:
             self._add_text("\n")
         if tag in HIDDEN and tag not in VOID:
@@ -154,7 +171,9 @@ class _Parser(HTMLParser):
             self.handle_endtag(tag)
 
     def handle_endtag(self, tag):
-        if tag == "title" and self.title_buf is not None:
+        if tag == "title" and self.svg_title:
+            self.svg_title = False
+        elif tag == "title" and self.title_buf is not None:
             self.page.titles.append("".join(self.title_buf))
             self.title_buf = None
         elif tag == "a":
@@ -182,6 +201,9 @@ class _Parser(HTMLParser):
         if self.script is not None:
             self.script["text"] += data
             return
+        if self.svg_title:
+            self.heading[2].append(data)
+            return
         if self.hidden:
             return
         self._add_text(data)
@@ -204,7 +226,9 @@ class _Parser(HTMLParser):
 
     def _close_heading(self):
         if self.heading is not None:
-            self.page.headings.append((self.heading[0], squash("".join(self.heading[1]))))
+            labels = list(dict.fromkeys(squash(l) for l in self.heading[2] if squash(l)))  # a logo often has the same name twice
+            text = squash("".join(self.heading[1])) or " ".join(labels)
+            self.page.headings.append((self.heading[0], text))
             self.heading = None
 
     def finish(self):

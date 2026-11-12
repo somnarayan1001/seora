@@ -19,9 +19,22 @@ Newest first. Add an entry with every change, and keep "Open items" current.
 - Brotli (`br`) compression can't be decoded with the standard library, so Seora asks for gzip only. The Technical group will check for brotli support separately.
 
 **Next**
-- Check group 2: Content (waiting for the owner's review of group 1).
+- Check group 3: Images (waiting for the owner's review of group 2).
 
 ## History
+
+### 2026-11-12: Check group 2: Content
+- New group `seora/checks/content.py`, shown after Meta tags.
+- **H1:** missing or empty is an error; more than one is a warning; one H1 passes and shows its text. An image inside a heading counts with its alt text, as search engines read it, so a logo H1 isn't reported as empty.
+- **Heading order:** a jump of more than one level down (H1 → H3) is a notice, listing the first three places. Going back up (H4 → H2) is fine. A first heading of H3 counts as a skip. Empty headings are a notice. A page with no headings at all is a warning.
+- **Word count:** fewer than 300 words is a warning for thin content. Menus and footers are included in the count, which the report says. When a page has under 50 words and loads scripts, the detail explains that the text is probably added by JavaScript, which Seora doesn't run. Chinese and Japanese text is counted at about two characters per word, since those languages don't use spaces.
+- **Text-to-HTML ratio:** under 10% is a notice (a weak signal on its own, but often a sign of a heavy page).
+- Severities chosen for the owner's review: skipped heading levels and a low text ratio are notices, thin content and several H1s are warnings.
+- Page reading fixes found while testing real sites:
+  - Headings that hold only an SVG logo are named by its `aria-label` or SVG `<title>` (bbc.com/news has `<h1><svg aria-label="News">`, which was reported as an empty H1). Real text in a heading still wins over a label, and a name given twice is shown once.
+  - Text inside `<textarea>` is no longer counted as page text. baidu.com keeps hidden HTML templates in textareas, which made it look like 41,909 words of content.
+- 12 new tests in `tests/test_content.py` (34 in total).
+- Checked with the server running: Wikipedia article, github.com, gov.uk, bbc.com/news, MDN, yahoo.co.jp (17 H1s, thin content), react.dev (2 H1s, H2 → H4), example.com (now has no headings at all). Baidu was checked before the textarea fix and then started refusing connections after repeated requests, so the fix is covered by a test instead. Interface checked at 1366×650 (the chips now take two rows and still fit the first screen) and at 375 px with no sideways scrolling, in both themes.
 
 ### 2026-11-12: First version: skeleton and Meta checks
 - New project, following the habits of Docura: project guide in `CLAUDE.md`, this change log, plain-language interface, Docura's dark indigo look with a light theme on the moon button.
