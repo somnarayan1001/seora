@@ -19,12 +19,26 @@ Newest first. Add an entry with every change, and keep "Open items" current.
 - Brotli (`br`) compression can't be decoded with the standard library, so Seora asks for gzip only. The Technical group will check for brotli support separately.
 
 **Speed**
-- Pages with many images take longer: about 13–15 s for bbc.com/news and apple.com from this PC, because each image needs a new secure connection and the network to their image servers is slow (about 0.4 s per round trip). Reusing one connection per image server would roughly halve this. Not done yet, because the connection pinning that blocks private addresses has to be kept for every reused connection.
+- A full report now takes about 8–13 s for big pages (bbc.com/news, github.com, gov.uk, python.org) and under a second for tiny ones. Sites with slow side pages can reach the time limits: apple.com takes about 33 s, because its shop links each go through two redirects (about 4.5 s each), so the Links group stops at its 25 s limit and reports the rest as not checked. Running the Images and Links groups at the same time would save up to 25 s on such pages; not done, to keep the load on each site at 6 requests at once.
 
 **Next**
-- Check group 4: Links (waiting for the owner's review of group 3).
+- Check group 5: Technical (waiting for the owner's review of group 4).
 
 ## History
+
+### 2026-11-12: Check group 4: Links, and connection reuse
+- New group `seora/checks/links.py`, shown after Images.
+- **Count:** links to this site and to other sites (www. and no www. count as the same site), and how many different addresses they go to. A page with no links to its own site is a warning; a page with no links at all is a notice. Same-page jumps (`#section`), `javascript:` links and email/phone links aren't counted as links.
+- **Broken links:** each distinct address is checked once, links to this site first: a HEAD request, and a small GET when HEAD fails or is refused (some servers answer HEAD wrongly). 4xx and 5xx answers, a site that doesn't exist, a certificate problem or a refused connection are an error, listing up to 5. A redirect that ends on a missing page is broken too. 401, 403, 429 and 999 (LinkedIn) are a notice ("refused Seora's check"), because sites with bot protection turn away automated checks. No answer in time is a notice. Up to 80 addresses per page (`MAX_LINKS_CHECKED`), within the same 25 s budget as images.
+- **Redirecting links:** a notice listing "old → new (status)", saying how many go to this site.
+- **nofollow:** links to your own site marked nofollow, ugc or sponsored are a warning. On links to other sites it's fine and only counted.
+- **Links without text:** a warning. Image alt text, `aria-label` (on the link or an icon inside it), an SVG `<title>` and the `title` attribute all count as text, so icon links for social sites aren't reported. Link copies inside `<noscript>` aren't counted.
+- **Connection reuse:** all fetches for one report now share a pool of kept-alive connections (`ConnectionPool` in `fetch.py`), as browsers do. This roughly halved report times: bbc.com/news 38 s → 13 s, gov.uk 24 s → 9 s, github.com 22 s → 10 s, python.org 15 s → 9 s. It's also gentler on sites. Safety is unchanged: a connection only enters the pool after its address passed the private-address check, it stays connected to that address, a connection whose reply wasn't read to the end is never reused, and the pool is closed when the report is done.
+- The image and link checks now share one helper (`checks/_fetchmany.py`) for fetching many addresses politely within the time budget. Checks that need to know why a fetch failed use the new `ctx.try_fetch`.
+- The waiting message now says "Measuring images and checking links…".
+- 18 new tests (65 in total): `tests/test_links.py` with a fake web (missing, moved and bot-blocking pages), and `tests/test_pool.py` against a real local server (one connection reused for 5 requests, servers that close connections, cut-off replies not reused, the private-address block still applies).
+- Checked with the server running: python.org, gov.uk, react.dev, a Wikipedia article (551 links, so the 80 cap shows), github.com, bbc.com/news, example.com (no links), w3.org/TR (4,215 links), apple.com. Interface checked at 1366×650 (the list of checks is now 3 rows and still fits the first screen) and 375 px with no sideways scrolling.
+- Severities chosen for the owner's review: broken links are an error; no links to your own site, nofollow on your own links and links without text are warnings; redirecting links, refused checks and links that didn't answer are notices.
 
 ### 2026-11-12: Check group 3: Images
 - New group `seora/checks/images.py`, shown after Content.

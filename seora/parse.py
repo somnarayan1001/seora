@@ -125,7 +125,10 @@ class _Parser(HTMLParser):
         elif tag == "a":
             self._close_anchor()
             self.anchor = {"href": a.get("href"), "url": self._url(a.get("href")), "rel": a.get("rel", ""),
-                           "text": [], "img_alt": [], "title": a.get("title", "")}
+                           "text": [], "img_alt": [], "title": a.get("title", ""),
+                           "aria_label": a.get("aria-label", ""), "labels": [],
+                           # copies inside <noscript>/<template> aren't shown when scripts run
+                           "_copy": bool({"noscript", "template"} & set(self._hidden_tags))}
         elif tag == "picture":
             self.picture = []
         elif tag == "source" and self.picture is not None:
@@ -155,7 +158,10 @@ class _Parser(HTMLParser):
         if self.heading is not None and a.get("aria-label"):
             # An icon or SVG logo labelled for screen readers names the heading when it has no text
             self.heading[2].append(a["aria-label"])
-        if tag == "title" and self.heading is not None and self.in_svg():
+        if self.anchor is not None and tag != "a" and a.get("aria-label"):
+            # icon links: <a><svg aria-label="Twitter">…</svg></a>
+            self.anchor["labels"].append(a["aria-label"])
+        if tag == "title" and (self.heading is not None or self.anchor is not None) and self.in_svg():
             self.svg_title = True
         if tag in BLOCK:
             self._add_text("\n")
@@ -213,7 +219,10 @@ class _Parser(HTMLParser):
             self.script["text"] += data
             return
         if self.svg_title:
-            self.heading[2].append(data)
+            if self.heading is not None:
+                self.heading[2].append(data)
+            if self.anchor is not None:
+                self.anchor["labels"].append(data)
             return
         if self.hidden:
             return
@@ -232,7 +241,9 @@ class _Parser(HTMLParser):
             a = self.anchor
             a["text"] = squash("".join(a["text"]))
             a["img_alt"] = squash(" ".join(a["img_alt"]))
-            self.page.anchors.append(a)
+            a["labels"] = " ".join(dict.fromkeys(squash(l) for l in a["labels"] if squash(l)))
+            if not a.pop("_copy"):
+                self.page.anchors.append(a)
             self.anchor = None
 
     def _close_heading(self):

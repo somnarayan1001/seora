@@ -38,16 +38,22 @@ class Context:
     charset: str
     charset_source: str
     extra_fetches: list = field(default_factory=list)
+    pool: object = None  # fetchmod.ConnectionPool shared by every fetch for this report
 
     def fetch(self, url, **kw):
         """Fetch another resource (image, favicon, robots.txt...) through the safe fetcher.
         Returns a Response, or None when it couldn't be fetched for any reason."""
-        try:
-            r = fetchmod.fetch(url, **kw)
-        except FetchError:
-            r = None
+        return self.try_fetch(url, **kw)[0]
+
+    def try_fetch(self, url, **kw):
+        """Like fetch(), but returns (Response, None) or (None, FetchError code such as "dns",
+        "timeout", "blocked", "tls_cert"), for checks that need to know why a fetch failed."""
         self.extra_fetches.append(url)
-        return r
+        kw.setdefault("pool", self.pool)
+        try:
+            return fetchmod.fetch(url, **kw), None
+        except FetchError as e:
+            return None, e.code
 
 
 def log_failure(where, exc):
@@ -61,10 +67,18 @@ def score_of(issues):
 
 
 def audit(raw_url):
+    pool = fetchmod.ConnectionPool()
+    try:
+        return _audit(raw_url, pool)
+    finally:
+        pool.close()
+
+
+def _audit(raw_url, pool):
     started = time.monotonic()
     try:
         url = fetchmod.normalise_input(raw_url)
-        resp = fetchmod.fetch(url)
+        resp = fetchmod.fetch(url, pool=pool)
     except FetchError as e:
         raise AuditError(e.message, e.code)
     if not resp.is_html:
@@ -73,7 +87,7 @@ def audit(raw_url):
     html, charset, source = fetchmod.decode_html(resp)
     page = parse(html, resp.url)
     ctx = Context(requested_url=url, final_url=resp.url, response=resp, page=page, html=html,
-                  charset=charset, charset_source=source)
+                  charset=charset, charset_source=source, pool=pool)
 
     groups = []
     for mod in GROUPS:

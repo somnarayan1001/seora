@@ -12,6 +12,8 @@ Everything that fetches another website must go through fetch().
 """
 
 import http.client
+import sys
+import threading
 import ipaddress
 import re
 import socket
@@ -203,14 +205,62 @@ class _PinnedHTTPS(http.client.HTTPSConnection):
 _TLS = ssl.create_default_context()
 
 
+class ConnectionPool:
+    """Idle keep-alive connections for one report, keyed by (scheme, host, port).
+
+    Reusing a connection saves the connection and HTTPS setup (often 1–2 s on slow routes) and is
+    gentler on the site. Safety: a connection is only ever created by _fetch_once after resolve()
+    approved its address, and it stays connected to that address, so reuse never skips the
+    private-address check. One request uses a connection at a time. Thread-safe.
+    """
+    MAX_IDLE_PER_HOST = 6
+
+    def __init__(self):
+        self._idle = {}
+        self._lock = threading.Lock()
+        self._closed = False
+        self.reused = 0  # for tests and tuning
+
+    def take(self, key):
+        with self._lock:
+            conns = self._idle.get(key)
+            if conns:
+                self.reused += 1
+                return conns.pop()
+        return None
+
+    def give(self, key, conn):
+        with self._lock:
+            if not self._closed:
+                conns = self._idle.setdefault(key, [])
+                if len(conns) < self.MAX_IDLE_PER_HOST:
+                    conns.append(conn)
+                    return
+        conn.close()
+
+    def close(self):
+        with self._lock:
+            self._closed = True
+            conns = [c for group in self._idle.values() for c in group]
+            self._idle.clear()
+        for c in conns:
+            c.close()
+
+
+# Errors that mean the server quietly closed an idle kept-alive connection: retry on a new one
+_STALE = (http.client.RemoteDisconnected, http.client.BadStatusLine, BrokenPipeError,
+          ConnectionResetError, ConnectionAbortedError)
+
+
 # ---------- fetching ----------
 
 def fetch(url, method="GET", max_bytes=None, accept="text/html,application/xhtml+xml,*/*;q=0.8",
-          extra_headers=None, follow_redirects=True, timeout=None):
+          extra_headers=None, follow_redirects=True, timeout=None, pool=None):
     """Fetch a URL safely. Returns a Response, or raises FetchError with a plain-English message.
 
     timeout: seconds for the whole fetch, redirects included (default config.TOTAL_TIMEOUT).
-    Use a shorter one for side requests such as images, so one slow file can't hold up a report."""
+    Use a shorter one for side requests such as images, so one slow file can't hold up a report.
+    pool: a ConnectionPool to reuse connections across fetches for the same report."""
     max_bytes = config.MAX_PAGE_BYTES if max_bytes is None else max_bytes
     started = time.monotonic()
     deadline = started + min(timeout or config.TOTAL_TIMEOUT, config.TOTAL_TIMEOUT)
@@ -221,7 +271,7 @@ def fetch(url, method="GET", max_bytes=None, accept="text/html,application/xhtml
         if url in seen:
             raise FetchError("The page redirects in a loop, so it never loads.", "redirect_loop")
         seen.add(url)
-        resp = _fetch_once(url, method, max_bytes, accept, extra_headers or {}, deadline)
+        resp = _fetch_once(url, method, max_bytes, accept, extra_headers or {}, deadline, pool)
         location = resp.header("location")
         if follow_redirects and resp.status in REDIRECT_CODES and location:
             chain.append(Hop(url, resp.status, location))
@@ -239,57 +289,104 @@ def fetch(url, method="GET", max_bytes=None, accept="text/html,application/xhtml
         return resp
 
 
-def _fetch_once(url, method, max_bytes, accept, extra_headers, deadline):
+def _fetch_once(url, method, max_bytes, accept, extra_headers, deadline, pool=None):
     parts = urlsplit(url)
     host = parts.hostname
     port = parts.port or DEFAULT_PORTS[parts.scheme]
+    key = (parts.scheme, host, port)
     target = parts.path or "/"
     if parts.query:
         target += "?" + parts.query
     hop_start = time.monotonic()
     timeout = max(1.0, min(config.TIMEOUT, deadline - hop_start))
-    ip = resolve(host, port)
-    if parts.scheme == "https":
-        conn = _PinnedHTTPS(host, ip, port, timeout, _TLS)
-    else:
-        conn = _PinnedHTTP(host, ip, port, timeout)
     headers = {
         "User-Agent": config.USER_AGENT,
         "Accept": accept,
         "Accept-Encoding": "gzip, deflate",
         "Accept-Language": "en;q=0.9, *;q=0.5",
-        "Connection": "close",
+        "Connection": "keep-alive" if pool is not None else "close",
     }
     headers.update(extra_headers)
+    conn = pool.take(key) if pool is not None else None
+    while True:
+        reused = conn is not None
+        if conn is None:
+            ip = resolve(host, port)  # the private-address check: every new connection passes here
+            if parts.scheme == "https":
+                conn = _PinnedHTTPS(host, ip, port, timeout, _TLS)
+            else:
+                conn = _PinnedHTTP(host, ip, port, timeout)
+        else:
+            conn.timeout = timeout
+            if conn.sock is not None:
+                conn.sock.settimeout(timeout)
+        keep = False
+        try:
+            conn.request(method, target, headers=headers)
+            r = conn.getresponse()
+            ttfb = (time.monotonic() - hop_start) * 1000
+            raw_headers = list(r.getheaders())
+            body, transfer, truncated, encoding = b"", 0, False, ""
+            dl_start = time.monotonic()
+            if method == "HEAD":
+                r.read()
+            elif r.status in REDIRECT_CODES:
+                _drain(r)
+            else:
+                body, transfer, truncated, encoding = _read_body(r, max_bytes, deadline)
+            download = (time.monotonic() - dl_start) * 1000
+            # Reuse only a connection whose reply was read to the end and that the server keeps open
+            keep = pool is not None and r.isclosed() and not r.will_close and not truncated
+            return Response(url=url, status=r.status, reason=r.reason or "", headers=raw_headers, body=body,
+                            content_encoding=encoding, transfer_bytes=transfer, truncated=truncated,
+                            ttfb_ms=ttfb, download_ms=download, ip=conn._ip)
+        except _STALE:
+            if not reused:
+                raise _as_fetch_error(sys.exc_info()[1])
+            # The server closed this idle connection in the meantime: try once more on a new one
+            conn.close()
+            conn = None
+            continue
+        except FetchError:
+            raise
+        except Exception as e:
+            raise _as_fetch_error(e)
+        finally:
+            if conn is not None:
+                if keep:
+                    pool.give(key, conn)
+                else:
+                    conn.close()
+
+
+def _drain(r, limit=65_536):
+    """Read and discard a small redirect body so the connection can be reused."""
     try:
-        conn.request(method, target, headers=headers)
-        r = conn.getresponse()
-        ttfb = (time.monotonic() - hop_start) * 1000
-        raw_headers = list(r.getheaders())
-        body, transfer, truncated, encoding = b"", 0, False, ""
-        dl_start = time.monotonic()
-        if method != "HEAD" and r.status not in REDIRECT_CODES:
-            body, transfer, truncated, encoding = _read_body(r, max_bytes, deadline)
-        download = (time.monotonic() - dl_start) * 1000
-        return Response(url=url, status=r.status, reason=r.reason or "", headers=raw_headers, body=body,
-                        content_encoding=encoding, transfer_bytes=transfer, truncated=truncated,
-                        ttfb_ms=ttfb, download_ms=download, ip=ip)
-    except FetchError:
-        raise
-    except ssl.SSLCertVerificationError as e:
-        raise FetchError(_cert_message(getattr(e, "verify_code", 0)), "tls_cert")
-    except ssl.SSLError:
-        raise FetchError("A secure (HTTPS) connection to the site couldn't be made.", "tls")
-    except (socket.timeout, TimeoutError):
-        raise FetchError("The site took too long to answer.", "timeout")
-    except ConnectionRefusedError:
-        raise FetchError("The site refused the connection.", "refused")
-    except (ConnectionError, OSError):
-        raise FetchError("The site couldn't be reached.", "unreachable")
-    except http.client.HTTPException:
-        raise FetchError("The site sent a reply that couldn't be understood.", "bad_reply")
-    finally:
-        conn.close()
+        while limit > 0:
+            chunk = r.read(min(8192, limit))
+            if not chunk:
+                break
+            limit -= len(chunk)
+    except Exception:
+        pass
+
+
+def _as_fetch_error(e):
+    """Turn a network exception into a FetchError with a plain-English message.
+    Anything that isn't a network problem (a bug) is re-raised as it is."""
+    if isinstance(e, ssl.SSLCertVerificationError):
+        return FetchError(_cert_message(getattr(e, "verify_code", 0)), "tls_cert")
+    if isinstance(e, ssl.SSLError):
+        return FetchError("A secure (HTTPS) connection to the site couldn't be made.", "tls")
+    if isinstance(e, (socket.timeout, TimeoutError)):
+        return FetchError("The site took too long to answer.", "timeout")
+    if isinstance(e, ConnectionRefusedError):
+        return FetchError("The site refused the connection.", "refused")
+    if isinstance(e, http.client.HTTPException):
+        return FetchError("The site sent a reply that couldn't be understood.", "bad_reply")
+    if isinstance(e, (ConnectionError, OSError)):
+        return FetchError("The site couldn't be reached.", "unreachable")
+    raise e
 
 
 def _cert_message(code):

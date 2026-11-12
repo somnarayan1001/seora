@@ -7,13 +7,12 @@ through ctx.fetch, a few at a time, within config.ASSET_BUDGET seconds.
 import base64
 import posixpath
 import re
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from concurrent.futures import TimeoutError as FuturesTimeout
 from dataclasses import dataclass
 from urllib.parse import unquote, urljoin, urlsplit
 
 import config
 
+from ._fetchmany import fetch_many
 from ._issue import clip, issue
 
 GROUP = "Images"
@@ -163,27 +162,12 @@ def measure(ctx, imgs):
             i.size = _data_url_size(i.url)
             i.ctype = i.url[5:].split(";")[0].split(",")[0].lower()
             i.status = 200
-    urls = list(dict.fromkeys(i.url for i in imgs if i.url.startswith(("http://", "https://"))))
-    todo, skipped = urls[: config.MAX_IMAGES_CHECKED], max(0, len(urls) - config.MAX_IMAGES_CHECKED)
-    results = {}
-    pool = ThreadPoolExecutor(max_workers=max(1, config.PARALLEL_FETCHES))
-    try:
-        futures = {pool.submit(probe, ctx, u): u for u in todo}
-        try:
-            for f in as_completed(futures, timeout=config.ASSET_BUDGET):
-                try:
-                    results[futures[f]] = f.result()
-                except Exception:
-                    results[futures[f]] = (None, None, "")
-        except FuturesTimeout:
-            pass  # images still waiting count as "couldn't be checked"
-    finally:
-        pool.shutdown(wait=False, cancel_futures=True)
-    attempted = set(todo)
+    urls = [i.url for i in imgs if i.url.startswith(("http://", "https://"))]
+    results, attempted, skipped = fetch_many(ctx, urls, probe, config.MAX_IMAGES_CHECKED)
     for i in imgs:
         i.fetched = i.url in attempted
         if i.url in results:
-            i.status, i.size, i.ctype = results[i.url]
+            i.status, i.size, i.ctype = results[i.url] or (None, None, "")
     return skipped
 
 
